@@ -1,6 +1,6 @@
 # EventHub - NoSQL Database Project
 
-[![EventHub](https://github.com/{your_username}/{your_repo}/actions/workflows/eventhub.yml/badge.svg)](https://github.com/{your_username}/{your_repo}/actions/workflows/eventhub.yml)
+[![EventHub](https://github.com/Spynch/ndbx/actions/workflows/eventhub.yml/badge.svg)](https://github.com/Spynch/ndbx/actions/workflows/eventhub.yml)
 
 Backend-сервис платформы мероприятий для практического изучения NoSQL баз данных.
 
