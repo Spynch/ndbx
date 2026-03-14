@@ -1,8 +1,17 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+    env_file:
+      - .env.local
+    depends_on:
+      - redis
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --save "" --appendonly no
     env_file:
       - .env.local
     ports:
-      - "${APP_PORT}:${APP_PORT}"
-    restart: unless-stopped
+      - "${REDIS_PORT}:${REDIS_PORT}"
