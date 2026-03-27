@@ -515,16 +515,29 @@ async def login(request: Request) -> Response:
 
 @app.post("/auth/logout")
 def logout(request: Request) -> Response:
-    sid = request.cookies.get(COOKIE_NAME)
+    auth_probe_response = Response(status_code=204)
+    sid = _refresh_session_for_post_if_exists(request, auth_probe_response)
 
-    if sid is not None and _is_valid_sid(sid):
-        try:
-            app.state.redis.delete(_session_key(sid))
-        except redis.RedisError as exc:
-            raise HTTPException(status_code=503, detail="Redis is unavailable") from exc
+    if sid is None:
+        return Response(status_code=401)
+
+    try:
+        user_id = _get_session_user_id(app.state.redis, sid)
+    except redis.RedisError as exc:
+        raise HTTPException(status_code=503, detail="Redis is unavailable") from exc
+
+    if user_id is None:
+        response = Response(status_code=401)
+        _set_session_cookie(response, sid, app.state.settings.session_ttl)
+        return response
+
+    try:
+        app.state.redis.delete(_session_key(sid))
+    except redis.RedisError as exc:
+        raise HTTPException(status_code=503, detail="Redis is unavailable") from exc
 
     response = Response(status_code=204)
-    _expire_session_cookie(response, sid or "")
+    _expire_session_cookie(response, sid)
     return response
 
 
