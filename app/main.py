@@ -635,28 +635,29 @@ def list_events(request: Request) -> Response:
         filters["title"] = {"$regex": re.escape(title_filter)}
 
     try:
-        cursor = app.state.mongodb["events"].find(filters)
-        if offset is not None:
-            cursor = cursor.skip(offset)
-        if limit is not None:
-            cursor = cursor.limit(limit)
-
         events = []
-        for document in cursor:
-            events.append(
-                {
-                    "id": str(document["_id"]),
-                    "title": document.get("title", ""),
-                    "description": document.get("description", ""),
-                    "location": {
-                        "address": document.get("location", {}).get("address", ""),
-                    },
-                    "created_at": document.get("created_at", ""),
-                    "created_by": document.get("created_by", ""),
-                    "started_at": document.get("started_at", ""),
-                    "finished_at": document.get("finished_at", ""),
-                }
-            )
+        if limit != 0:
+            cursor = app.state.mongodb["events"].find(filters)
+            if offset is not None:
+                cursor = cursor.skip(offset)
+            if limit is not None:
+                cursor = cursor.limit(limit)
+
+            for document in cursor:
+                events.append(
+                    {
+                        "id": str(document["_id"]),
+                        "title": document.get("title", ""),
+                        "description": document.get("description", ""),
+                        "location": {
+                            "address": document.get("location", {}).get("address", ""),
+                        },
+                        "created_at": document.get("created_at", ""),
+                        "created_by": document.get("created_by", ""),
+                        "started_at": document.get("started_at", ""),
+                        "finished_at": document.get("finished_at", ""),
+                    }
+                )
     except PyMongoError as exc:
         raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
 

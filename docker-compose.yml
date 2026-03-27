@@ -8,22 +8,22 @@ services:
       - redis
       - mongodb
     ports:
-      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+      - "${APP_PORT}:${APP_PORT}"
   redis:
     image: redis:7.4-alpine
     command: redis-server --save "" --appendonly no
     env_file:
       - .env.local
     ports:
-      - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
+      - "${REDIS_PORT}:${REDIS_PORT}"
   mongodb:
     image: mongo:8.0
-    command: ["mongod", "--port", "${MONGODB_PORT:-27017}"]
+    command: ["mongod", "--port", "${MONGODB_PORT}"]
     env_file:
       - .env.local
     environment:
-      MONGO_INITDB_ROOT_USERNAME: "${MONGODB_USER:-eventhub}"
-      MONGO_INITDB_ROOT_PASSWORD: "${MONGODB_PASSWORD:-eventhub}"
-      MONGO_INITDB_DATABASE: "${MONGODB_DATABASE:-eventhub}"
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE}
     ports:
-      - "${MONGODB_PORT:-27017}:${MONGODB_PORT:-27017}"
+      - "${MONGODB_PORT}:${MONGODB_PORT}"
