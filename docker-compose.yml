@@ -21,9 +21,5 @@ services:
     command: ["mongod", "--port", "${MONGODB_PORT}"]
     env_file:
       - .env.local
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE}
     ports:
       - "${MONGODB_PORT}:${MONGODB_PORT}"
