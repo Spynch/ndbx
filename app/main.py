@@ -150,6 +150,7 @@ def _ensure_indexes(app_instance: FastAPI) -> None:
 
     users.create_index([("username", ASCENDING)], unique=True)
     users.create_index([("full_name", ASCENDING)])
+    events.create_index([("title", ASCENDING), ("created_by", ASCENDING)])
     events.create_index([("created_by", ASCENDING), ("title", ASCENDING)])
     events.create_index([("created_by", ASCENDING)])
     events.create_index([("title", ASCENDING)])
