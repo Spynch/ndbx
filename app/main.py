@@ -1137,10 +1137,150 @@ def list_user_events(user_id: str, request: Request) -> Response:
         _append_cookie_for_get_if_exists(request, response)
         return response
 
+    title_filter = request.query_params.get("title")
+    event_id_filter = request.query_params.get("id")
+    category_filter = request.query_params.get("category")
+    city_filter = request.query_params.get("city")
+
     try:
-        documents = list(app.state.mongodb["events"].find(_created_by_match_filter(user_id)))
+        limit = _parse_uint_parameter(request, "limit")
+    except ValueError:
+        response = _invalid_field_response("limit")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    try:
+        offset = _parse_uint_parameter(request, "offset")
+    except ValueError:
+        response = _invalid_field_response("offset")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    try:
+        price_from = _parse_uint_parameter(request, "price_from")
+    except ValueError:
+        response = _invalid_field_response("price_from")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    try:
+        price_to = _parse_uint_parameter(request, "price_to")
+    except ValueError:
+        response = _invalid_field_response("price_to")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    try:
+        date_from = _parse_yyyymmdd_parameter(request, "date_from")
+    except ValueError:
+        response = _invalid_field_response("date_from")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    try:
+        date_to = _parse_yyyymmdd_parameter(request, "date_to")
+    except ValueError:
+        response = _invalid_field_response("date_to")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    legacy_date_from_raw = request.query_params.get("started_date_from")
+    if date_from is None and legacy_date_from_raw is not None:
+        try:
+            date_from = _parse_yyyymmdd_value(legacy_date_from_raw, "started_date_from")
+        except ValueError:
+            response = _invalid_field_response("started_date_from")
+            _append_cookie_for_get_if_exists(request, response)
+            return response
+
+    legacy_date_to_raw = request.query_params.get("started_date_to")
+    if date_to is None and legacy_date_to_raw is not None:
+        try:
+            date_to = _parse_yyyymmdd_value(legacy_date_to_raw, "started_date_to")
+        except ValueError:
+            response = _invalid_field_response("started_date_to")
+            _append_cookie_for_get_if_exists(request, response)
+            return response
+
+    if price_from is not None and price_to is not None and price_from > price_to:
+        response = _invalid_field_response("price_to")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    if date_from is not None and date_to is not None and date_from > date_to:
+        response = _invalid_field_response("date_to")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    if category_filter is not None and category_filter not in EVENT_CATEGORIES:
+        response = _invalid_field_response("category")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    if city_filter is not None and city_filter.strip() == "":
+        response = _invalid_field_response("city")
+        _append_cookie_for_get_if_exists(request, response)
+        return response
+
+    filters: dict[str, Any] = _created_by_match_filter(user_id)
+    if title_filter is not None:
+        filters["title"] = {"$regex": re.escape(title_filter)}
+
+    if event_id_filter is not None:
+        if event_id_filter.strip() == "":
+            response = _invalid_field_response("id")
+            _append_cookie_for_get_if_exists(request, response)
+            return response
+
+        event_object_id = _parse_object_id(event_id_filter)
+        if event_object_id is None:
+            response = JSONResponse(status_code=200, content={"events": [], "count": 0})
+            _append_cookie_for_get_if_exists(request, response)
+            return response
+
+        filters["_id"] = event_object_id
+
+    if category_filter is not None:
+        filters["category"] = category_filter
+
+    if city_filter is not None:
+        filters["location.city"] = city_filter
+
+    if price_from is not None or price_to is not None:
+        price_filter: dict[str, int] = {}
+        if price_from is not None:
+            price_filter["$gte"] = price_from
+        if price_to is not None:
+            price_filter["$lte"] = price_to
+        filters["price"] = price_filter
+
+    try:
+        documents = list(app.state.mongodb["events"].find(filters))
     except PyMongoError as exc:
         raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
+
+    if date_from is not None or date_to is not None:
+        filtered_documents = []
+        for document in documents:
+            started_date = _event_started_date(document)
+            if started_date is None:
+                continue
+
+            if date_from is not None and started_date < date_from:
+                continue
+
+            if date_to is not None and started_date > date_to:
+                continue
+
+            filtered_documents.append(document)
+
+        documents = filtered_documents
+
+    if offset is not None:
+        documents = documents[offset:]
+
+    if limit is not None:
+        documents = documents[:limit]
 
     events = [_serialize_event(document) for document in documents]
     response = JSONResponse(status_code=200, content={"events": events, "count": len(events)})
