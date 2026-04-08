@@ -1,2 +1,2 @@
-# Номер лабораторной работы, которую проверяем в CI.
-LAB=3
+# Current lab number for CI checks.
+LAB=4

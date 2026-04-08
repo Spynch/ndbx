@@ -5,21 +5,251 @@ services:
     env_file:
       - .env.local
     depends_on:
-      - redis
-      - mongodb
+      redis:
+        condition: service_healthy
+      mongos:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     ports:
       - "${APP_PORT}:${APP_PORT}"
+
   redis:
     image: redis:7.4-alpine
-    command: redis-server --save "" --appendonly no
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--port", "${REDIS_PORT}"]
     env_file:
       - .env.local
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
-  mongodb:
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -p ${REDIS_PORT} ping | grep PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  mongo-cfg-1:
     image: mongo:8.0
-    command: ["mongod", "--port", "${MONGODB_PORT}"]
-    env_file:
-      - .env.local
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - ${MONGO_CFG_RS}
+      - --port
+      - ${MONGO_CFG_1_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-cfg-1-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_CFG_1_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-cfg-2:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - ${MONGO_CFG_RS}
+      - --port
+      - ${MONGO_CFG_2_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-cfg-2-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_CFG_2_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-cfg-3:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - ${MONGO_CFG_RS}
+      - --port
+      - ${MONGO_CFG_3_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-cfg-3-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_CFG_3_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard1-1:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD1_RS}
+      - --port
+      - ${MONGO_SHARD1_1_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard1-1-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD1_1_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard1-2:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD1_RS}
+      - --port
+      - ${MONGO_SHARD1_2_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard1-2-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD1_2_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard1-3:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD1_RS}
+      - --port
+      - ${MONGO_SHARD1_3_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard1-3-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD1_3_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard2-1:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD2_RS}
+      - --port
+      - ${MONGO_SHARD2_1_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard2-1-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD2_1_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard2-2:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD2_RS}
+      - --port
+      - ${MONGO_SHARD2_2_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard2-2-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD2_2_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-shard2-3:
+    image: mongo:8.0
+    command:
+      - mongod
+      - --shardsvr
+      - --replSet
+      - ${MONGO_SHARD2_RS}
+      - --port
+      - ${MONGO_SHARD2_3_PORT}
+      - --bind_ip_all
+    volumes:
+      - mongo-shard2-3-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGO_SHARD2_3_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongos:
+    image: mongo:8.0
+    depends_on:
+      mongo-cfg-1:
+        condition: service_healthy
+      mongo-cfg-2:
+        condition: service_healthy
+      mongo-cfg-3:
+        condition: service_healthy
+    command:
+      - mongos
+      - --configdb
+      - ${MONGO_CFG_RS}/mongo-cfg-1:${MONGO_CFG_1_PORT},mongo-cfg-2:${MONGO_CFG_2_PORT},mongo-cfg-3:${MONGO_CFG_3_PORT}
+      - --bind_ip_all
+      - --port
+      - ${MONGODB_PORT}
     ports:
       - "${MONGODB_PORT}:${MONGODB_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --host localhost --port ${MONGODB_PORT} --quiet --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  mongo-init:
+    image: mongo:8.0
+    env_file:
+      - .env.local
+    depends_on:
+      mongo-cfg-1:
+        condition: service_healthy
+      mongo-cfg-2:
+        condition: service_healthy
+      mongo-cfg-3:
+        condition: service_healthy
+      mongo-shard1-1:
+        condition: service_healthy
+      mongo-shard1-2:
+        condition: service_healthy
+      mongo-shard1-3:
+        condition: service_healthy
+      mongo-shard2-1:
+        condition: service_healthy
+      mongo-shard2-2:
+        condition: service_healthy
+      mongo-shard2-3:
+        condition: service_healthy
+      mongos:
+        condition: service_started
+    volumes:
+      - ./mongo:/scripts:ro
+    command: ["bash", "/scripts/init-mongo.sh"]
+    restart: "no"
+
+volumes:
+  mongo-cfg-1-data:
+  mongo-cfg-2-data:
+  mongo-cfg-3-data:
+  mongo-shard1-1-data:
+  mongo-shard1-2-data:
+  mongo-shard1-3-data:
+  mongo-shard2-1-data:
+  mongo-shard2-2-data:
+  mongo-shard2-3-data:
