@@ -368,6 +368,18 @@ def _parse_object_id(raw_value: str) -> ObjectId | None:
     return ObjectId(raw_value)
 
 
+def _created_by_match_filter(user_id: str) -> dict[str, Any]:
+    created_by_values: list[Any] = [user_id]
+    created_by_object_id = _parse_object_id(user_id)
+    if created_by_object_id is not None:
+        created_by_values.append(created_by_object_id)
+
+    if len(created_by_values) == 1:
+        return {"created_by": created_by_values[0]}
+
+    return {"created_by": {"$in": created_by_values}}
+
+
 def _is_uint_value(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
@@ -397,6 +409,12 @@ def _serialize_event(document: dict[str, Any]) -> dict[str, Any]:
     if city is not None:
         location["city"] = city
 
+    created_by = document.get("created_by")
+    if isinstance(created_by, ObjectId):
+        created_by = str(created_by)
+    elif not isinstance(created_by, str):
+        created_by = ""
+
     return {
         "id": str(document["_id"]),
         "title": document.get("title", ""),
@@ -405,7 +423,7 @@ def _serialize_event(document: dict[str, Any]) -> dict[str, Any]:
         "description": document.get("description", ""),
         "location": location,
         "created_at": document.get("created_at", ""),
-        "created_by": document.get("created_by", ""),
+        "created_by": created_by,
         "started_at": document.get("started_at", ""),
         "finished_at": document.get("finished_at", ""),
     }
@@ -860,7 +878,7 @@ def list_events(request: Request) -> Response:
             _append_cookie_for_get_if_exists(request, response)
             return response
 
-        filters["created_by"] = str(user_document["_id"])
+        filters.update(_created_by_match_filter(str(user_document["_id"])))
 
     try:
         documents = list(app.state.mongodb["events"].find(filters))
@@ -984,7 +1002,8 @@ async def update_event(event_id: str, request: Request) -> Response:
         _set_session_cookie(response, sid, app.state.settings.session_ttl)
         return response
 
-    event_filter = {"_id": object_id, "created_by": user_id}
+    event_filter = {"_id": object_id}
+    event_filter.update(_created_by_match_filter(user_id))
     try:
         if update_set or update_unset:
             update_document: dict[str, Any] = {}
@@ -1119,7 +1138,7 @@ def list_user_events(user_id: str, request: Request) -> Response:
         return response
 
     try:
-        documents = list(app.state.mongodb["events"].find({"created_by": user_id}))
+        documents = list(app.state.mongodb["events"].find(_created_by_match_filter(user_id)))
     except PyMongoError as exc:
         raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
 

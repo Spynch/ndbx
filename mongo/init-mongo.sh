@@ -97,6 +97,8 @@ init_replica_set "mongo-shard2-1" "$MONGO_SHARD2_1_PORT" "{
 }"
 wait_for_primary "mongo-shard2-1" "$MONGO_SHARD2_1_PORT"
 
+wait_for_mongo "$MONGODB_HOST" "$MONGODB_PORT"
+
 echo "Registering shards in mongos..."
 add_shard_if_missing \
   "${MONGO_SHARD1_RS}" \
