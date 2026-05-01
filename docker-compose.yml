@@ -7,6 +7,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      cassandra-test:
+        condition: service_healthy
       mongos:
         condition: service_healthy
       mongo-init:
@@ -26,6 +28,26 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+
+  cassandra-test:
+    image: cassandra:5.0
+    env_file:
+      - .env.local
+    environment:
+      CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME}
+      CASSANDRA_NUM_TOKENS: ${CASSANDRA_NUM_TOKENS}
+      MAX_HEAP_SIZE: ${CASSANDRA_MAX_HEAP_SIZE}
+      HEAP_NEWSIZE: ${CASSANDRA_HEAP_NEWSIZE}
+    ports:
+      - "${CASSANDRA_PORT}:${CASSANDRA_PORT}"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh localhost ${CASSANDRA_PORT} -e \"DESCRIBE KEYSPACES\""]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 40s
 
   mongo-cfg-1:
     image: mongo:8.0
@@ -253,3 +275,4 @@ volumes:
   mongo-shard2-1-data:
   mongo-shard2-2-data:
   mongo-shard2-3-data:
+  cassandra-data:
