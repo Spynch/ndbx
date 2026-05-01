@@ -1,5 +1,4 @@
 import hashlib
-import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -48,20 +47,27 @@ def _parse_reactions_payload(payload: Any) -> dict[str, int] | None:
 
 
 def _read_reactions_from_cache(redis_client: redis.Redis, cache_key: str) -> dict[str, int] | None:
-    raw_payload = redis_client.get(cache_key)
-    if raw_payload is None:
+    raw_payload = redis_client.hgetall(cache_key)
+    if not raw_payload:
         return None
 
+    likes_raw = raw_payload.get("likes")
+    dislikes_raw = raw_payload.get("dislikes")
     try:
-        parsed_payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
+        likes = int(likes_raw) if likes_raw is not None else 0
+        dislikes = int(dislikes_raw) if dislikes_raw is not None else 0
+    except (TypeError, ValueError):
         return None
 
-    return _parse_reactions_payload(parsed_payload)
+    return _parse_reactions_payload({"likes": likes, "dislikes": dislikes})
 
 
 def _cache_reactions(redis_client: redis.Redis, cache_key: str, reactions: dict[str, int], ttl: int) -> None:
-    redis_client.set(cache_key, json.dumps(reactions), ex=ttl)
+    with redis_client.pipeline() as pipeline:
+        pipeline.delete(cache_key)
+        pipeline.hset(cache_key, mapping=reactions)
+        pipeline.expire(cache_key, ttl)
+        pipeline.execute()
 
 
 def _in_memory_reaction_totals_for_event_ids(request: Request, event_ids: list[str]) -> tuple[dict[str, int], bool]:
