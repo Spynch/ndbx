@@ -153,6 +153,12 @@ def _set_event_reaction(
     event_title = event_document.get("title")
     if isinstance(event_title, str):
         invalidate_event_title_reactions_cache(request, event_title)
+        try:
+            reactions_for_event_title(request, event_title)
+        except PyMongoError as exc:
+            raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
+        except DriverException as exc:
+            raise HTTPException(status_code=503, detail="Cassandra is unavailable") from exc
 
     response = Response(status_code=204)
     set_session_cookie(response, sid, request.app.state.settings.session_ttl)
