@@ -22,37 +22,6 @@ SID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 INDEX_INIT_ATTEMPTS = 20
 INDEX_INIT_DELAY_SECONDS = 0.5
 
-CREATE_SESSION_SCRIPT = """
-if redis.call('EXISTS', KEYS[1]) == 1 then
-    return 0
-end
-redis.call('HSET', KEYS[1], 'created_at', ARGV[1], 'updated_at', ARGV[1])
-if ARGV[3] ~= '' then
-    redis.call('HSET', KEYS[1], 'user_id', ARGV[3])
-end
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
-return 1
-"""
-
-REFRESH_SESSION_SCRIPT = """
-if redis.call('EXISTS', KEYS[1]) == 0 then
-    return 0
-end
-redis.call('HSET', KEYS[1], 'updated_at', ARGV[1])
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
-return 1
-"""
-
-ASSIGN_USER_TO_SESSION_SCRIPT = """
-if redis.call('EXISTS', KEYS[1]) == 0 then
-    return 0
-end
-redis.call('HSET', KEYS[1], 'user_id', ARGV[1], 'updated_at', ARGV[2])
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
-return 1
-"""
-
-
 def _read_required_env(name: str) -> str:
     value = os.getenv(name)
     if value is None:
@@ -86,6 +55,7 @@ def _read_int_env(name: str, min_value: int = 0) -> int:
 
 @dataclass(frozen=True)
 class Settings:
+    app_host: str
     app_port: int
     session_ttl: int
     redis_host: str
@@ -101,6 +71,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            app_host=_read_required_env("APP_HOST"),
             app_port=_read_int_env("APP_PORT", min_value=1),
             session_ttl=_read_int_env("APP_USER_SESSION_TTL", min_value=1),
             redis_host=_read_required_env("REDIS_HOST"),
@@ -193,31 +164,51 @@ def _expire_session_cookie(response: Response, sid: str) -> None:
 def _create_session(redis_client: redis.Redis, ttl: int, user_id: str = "") -> str:
     for _ in range(10):
         sid = _generate_sid()
+        key = _session_key(sid)
         now = _utc_now_rfc3339()
-        created = redis_client.eval(
-            CREATE_SESSION_SCRIPT,
-            1,
-            _session_key(sid),
-            now,
-            ttl,
-            user_id,
-        )
-        if int(created) == 1:
-            return sid
+
+        with redis_client.pipeline() as pipe:
+            while True:
+                try:
+                    pipe.watch(key)
+                    if pipe.exists(key):
+                        pipe.unwatch()
+                        break
+
+                    session_payload = {"created_at": now, "updated_at": now}
+                    if user_id != "":
+                        session_payload["user_id"] = user_id
+
+                    pipe.multi()
+                    pipe.hset(key, mapping=session_payload)
+                    pipe.expire(key, ttl)
+                    pipe.execute()
+                    return sid
+                except redis.WatchError:
+                    continue
 
     raise RuntimeError("Could not allocate unique session id")
 
 
 def _refresh_session_if_exists(redis_client: redis.Redis, sid: str, ttl: int) -> bool:
+    key = _session_key(sid)
     now = _utc_now_rfc3339()
-    updated = redis_client.eval(
-        REFRESH_SESSION_SCRIPT,
-        1,
-        _session_key(sid),
-        now,
-        ttl,
-    )
-    return int(updated) == 1
+
+    with redis_client.pipeline() as pipe:
+        while True:
+            try:
+                pipe.watch(key)
+                if not pipe.exists(key):
+                    pipe.unwatch()
+                    return False
+
+                pipe.multi()
+                pipe.hset(key, "updated_at", now)
+                pipe.expire(key, ttl)
+                pipe.execute()
+                return True
+            except redis.WatchError:
+                continue
 
 
 def _assign_user_to_session(
@@ -226,16 +217,24 @@ def _assign_user_to_session(
     user_id: str,
     ttl: int,
 ) -> bool:
+    key = _session_key(sid)
     now = _utc_now_rfc3339()
-    updated = redis_client.eval(
-        ASSIGN_USER_TO_SESSION_SCRIPT,
-        1,
-        _session_key(sid),
-        user_id,
-        now,
-        ttl,
-    )
-    return int(updated) == 1
+
+    with redis_client.pipeline() as pipe:
+        while True:
+            try:
+                pipe.watch(key)
+                if not pipe.exists(key):
+                    pipe.unwatch()
+                    return False
+
+                pipe.multi()
+                pipe.hset(key, mapping={"user_id": user_id, "updated_at": now})
+                pipe.expire(key, ttl)
+                pipe.execute()
+                return True
+            except redis.WatchError:
+                continue
 
 
 def _safe_get_json_field(payload: Any, field_name: str) -> str | None:
@@ -686,7 +685,7 @@ def list_events(request: Request) -> Response:
 
 
 def main() -> None:
-    uvicorn.run(app, host="0.0.0.0", port=settings.app_port)
+    uvicorn.run(app, host=settings.app_host, port=settings.app_port)
 
 
 if __name__ == "__main__":
