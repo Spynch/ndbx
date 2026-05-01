@@ -14,24 +14,6 @@ SESSION_KEY_PREFIX = "sid:"
 SID_BYTES = 16
 SID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
-CREATE_SESSION_SCRIPT = """
-if redis.call('EXISTS', KEYS[1]) == 1 then
-    return 0
-end
-redis.call('HSET', KEYS[1], 'created_at', ARGV[1], 'updated_at', ARGV[1])
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
-return 1
-"""
-
-REFRESH_SESSION_SCRIPT = """
-if redis.call('EXISTS', KEYS[1]) == 0 then
-    return 0
-end
-redis.call('HSET', KEYS[1], 'updated_at', ARGV[1])
-redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
-return 1
-"""
-
 
 def _read_required_env(name: str) -> str:
     value = os.getenv(name)
@@ -54,6 +36,7 @@ def _read_int_env(name: str, min_value: int = 0) -> int:
 
 @dataclass(frozen=True)
 class Settings:
+    app_host: str
     app_port: int
     session_ttl: int
     redis_host: str
@@ -64,6 +47,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            app_host=_read_required_env("APP_HOST"),
             app_port=_read_int_env("APP_PORT", min_value=1),
             session_ttl=_read_int_env("APP_USER_SESSION_TTL", min_value=1),
             redis_host=_read_required_env("REDIS_HOST"),
@@ -115,30 +99,47 @@ def _set_session_cookie(response: Response, sid: str, ttl: int) -> None:
 def _create_session(redis_client: redis.Redis, ttl: int) -> str:
     for _ in range(10):
         sid = _generate_sid()
+        key = _session_key(sid)
         now = _utc_now_rfc3339()
-        created = redis_client.eval(
-            CREATE_SESSION_SCRIPT,
-            1,
-            _session_key(sid),
-            now,
-            ttl,
-        )
-        if int(created) == 1:
-            return sid
+
+        with redis_client.pipeline() as pipe:
+            while True:
+                try:
+                    pipe.watch(key)
+                    if pipe.exists(key):
+                        pipe.unwatch()
+                        break
+
+                    pipe.multi()
+                    pipe.hset(key, mapping={"created_at": now, "updated_at": now})
+                    pipe.expire(key, ttl)
+                    pipe.execute()
+                    return sid
+                except redis.WatchError:
+                    continue
 
     raise RuntimeError("Could not allocate unique session id")
 
 
 def _refresh_session_if_exists(redis_client: redis.Redis, sid: str, ttl: int) -> bool:
+    key = _session_key(sid)
     now = _utc_now_rfc3339()
-    updated = redis_client.eval(
-        REFRESH_SESSION_SCRIPT,
-        1,
-        _session_key(sid),
-        now,
-        ttl,
-    )
-    return int(updated) == 1
+
+    with redis_client.pipeline() as pipe:
+        while True:
+            try:
+                pipe.watch(key)
+                if not pipe.exists(key):
+                    pipe.unwatch()
+                    return False
+
+                pipe.multi()
+                pipe.hset(key, "updated_at", now)
+                pipe.expire(key, ttl)
+                pipe.execute()
+                return True
+            except redis.WatchError:
+                continue
 
 
 settings = Settings.from_env()
@@ -191,7 +192,7 @@ def session(request: Request) -> Response:
 
 
 def main() -> None:
-    uvicorn.run(app, host="0.0.0.0", port=settings.app_port)
+    uvicorn.run(app, host=settings.app_host, port=settings.app_port)
 
 
 if __name__ == "__main__":
