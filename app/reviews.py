@@ -1,5 +1,4 @@
 import hashlib
-import json
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -92,16 +91,17 @@ def _parse_reviews_payload(payload: Any) -> dict[str, float | int] | None:
 
 
 def _read_reviews_from_cache(redis_client: redis.Redis, cache_key: str) -> dict[str, float | int] | None:
-    raw_payload = redis_client.get(cache_key)
-    if raw_payload is None:
+    raw_payload = redis_client.hgetall(cache_key)
+    if not raw_payload:
         return None
 
     try:
-        payload = json.loads(raw_payload)
+        count = int(raw_payload.get("count", "0"))
+        rating = float(raw_payload.get("rating", "0"))
     except (TypeError, ValueError):
         return None
 
-    return _parse_reviews_payload(payload)
+    return _parse_reviews_payload({"count": count, "rating": rating})
 
 
 def _cache_reviews(
@@ -110,7 +110,11 @@ def _cache_reviews(
     reviews: dict[str, float | int],
     ttl: int,
 ) -> None:
-    redis_client.setex(cache_key, ttl, json.dumps(reviews))
+    with redis_client.pipeline() as pipeline:
+        pipeline.delete(cache_key)
+        pipeline.hset(cache_key, mapping=reviews)
+        pipeline.expire(cache_key, ttl)
+        pipeline.execute()
 
 
 def _round_rating(value: Decimal) -> float:
