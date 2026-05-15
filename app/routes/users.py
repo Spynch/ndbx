@@ -19,6 +19,7 @@ from app.http_utils import (
     serialize_user,
 )
 from app.reactions import empty_reactions, reactions_for_event_titles, should_include_reactions
+from app.reviews import empty_reviews, reviews_for_event_titles, should_include_reviews
 from app.routes.common import append_cookie_for_get_if_exists
 
 router = APIRouter()
@@ -280,6 +281,17 @@ def list_user_events(user_id: str, request: Request) -> Response:
 
         for event in events:
             event["reactions"] = dict(reactions_by_title.get(event["title"], empty_reactions()))
+
+    if should_include_reviews(request):
+        try:
+            reviews_by_title = reviews_for_event_titles(request, [event["title"] for event in events])
+        except PyMongoError as exc:
+            raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
+        except DriverException as exc:
+            raise HTTPException(status_code=503, detail="Cassandra is unavailable") from exc
+
+        for event in events:
+            event["reviews"] = dict(reviews_by_title.get(event["title"], empty_reviews()))
 
     response = JSONResponse(status_code=200, content={"events": events, "count": len(events)})
     append_cookie_for_get_if_exists(request, response)

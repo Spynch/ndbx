@@ -107,7 +107,7 @@ add_shard_if_missing \
   "${MONGO_SHARD2_RS}" \
   "${MONGO_SHARD2_RS}/mongo-shard2-1:${MONGO_SHARD2_1_PORT},mongo-shard2-2:${MONGO_SHARD2_2_PORT},mongo-shard2-3:${MONGO_SHARD2_3_PORT}"
 
-DATABASE_NAME="${MONGODB_DATABASE:-eventhub}"
+DATABASE_NAME="${MONGODB_DATABASE:?MONGODB_DATABASE is required}"
 
 echo "Enabling sharding for ${DATABASE_NAME}.events..."
 mongosh --quiet --host "$MONGODB_HOST" --port "$MONGODB_PORT" --eval "

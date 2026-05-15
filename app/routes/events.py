@@ -31,6 +31,12 @@ from app.reactions import (
     should_include_reactions,
     upsert_event_reaction,
 )
+from app.reviews import (
+    empty_reviews,
+    reviews_for_event_title,
+    reviews_for_event_titles,
+    should_include_reviews,
+)
 from app.routes.common import append_cookie_for_get_if_exists, require_authenticated_user_for_post
 from app.session import COOKIE_NAME, expire_session_cookie, set_session_cookie, utc_now_rfc3339
 
@@ -353,6 +359,17 @@ def list_events(request: Request) -> Response:
         for event in events:
             event["reactions"] = dict(reactions_by_title.get(event["title"], empty_reactions()))
 
+    if should_include_reviews(request):
+        try:
+            reviews_by_title = reviews_for_event_titles(request, [event["title"] for event in events])
+        except PyMongoError as exc:
+            raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
+        except DriverException as exc:
+            raise HTTPException(status_code=503, detail="Cassandra is unavailable") from exc
+
+        for event in events:
+            event["reviews"] = dict(reviews_by_title.get(event["title"], empty_reviews()))
+
     response = JSONResponse(status_code=200, content={"events": events, "count": len(events)})
     append_cookie_for_get_if_exists(request, response)
     return response
@@ -380,6 +397,14 @@ def get_event(event_id: str, request: Request) -> Response:
     if should_include_reactions(request):
         try:
             event["reactions"] = reactions_for_event_title(request, event["title"])
+        except PyMongoError as exc:
+            raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
+        except DriverException as exc:
+            raise HTTPException(status_code=503, detail="Cassandra is unavailable") from exc
+
+    if should_include_reviews(request):
+        try:
+            event["reviews"] = reviews_for_event_title(request, event["title"])
         except PyMongoError as exc:
             raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
         except DriverException as exc:

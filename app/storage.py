@@ -114,3 +114,17 @@ def ensure_cassandra_schema(app_instance: FastAPI) -> None:
         ON event_reactions (created_by)
         """
     )
+    session.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_reviews (
+            event_id text,
+            created_by text,
+            id uuid,
+            rating tinyint,
+            comment text,
+            created_at timestamp,
+            updated_at timestamp,
+            PRIMARY KEY (event_id, created_by)
+        )
+        """
+    )
