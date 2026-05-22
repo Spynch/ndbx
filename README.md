@@ -46,3 +46,36 @@ Backend-сервис платформы мероприятий для практ
 ## Помощь
 
 Возникли вопросы? → [@sitnikovik](https://t.me/sitnikovik)
+
+## Лабораторная работа №2: анонимные сессии на Redis
+
+### Запуск
+
+```bash
+make run
+```
+
+Приложение будет доступно на `http://localhost:8080`.
+
+### Конфигурация
+
+Все настройки задаются в `.env.local`:
+
+- `APP_HOST`
+- `APP_PORT`
+- `APP_USER_SESSION_TTL`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_PASSWORD`
+- `REDIS_DB`
+
+### API
+
+- `GET /health`
+  - Всегда возвращает `{"status":"ok"}`
+  - Не создаёт и не продлевает сессию в Redis
+  - Если в запросе есть `X-Session-Id`, возвращает ту же cookie
+- `POST /session`
+  - Создаёт новую сессию при первом визите (`201 Created`)
+  - Обновляет TTL существующей сессии (`200 OK`)
+  - Сессии хранятся в Redis как Hash по ключу `sid:{session_id}` с полями `created_at` и `updated_at`

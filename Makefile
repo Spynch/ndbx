@@ -15,12 +15,10 @@ rund:
 services:
 	docker compose ps
 
-# Stops all running services.
 .PHONY: stop
 stop:
 	docker compose down
 
-# Cleans up all resources including volumes.
 .PHONY: clean
 clean:
 	docker compose down -v
