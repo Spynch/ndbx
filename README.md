@@ -47,7 +47,7 @@ Backend-сервис платформы мероприятий для практ
 
 Возникли вопросы? → [@sitnikovik](https://t.me/sitnikovik)
 
-## Лабораторная работа №2: анонимные сессии на Redis
+## Лабораторная работа №3: пользователи и события (Redis + MongoDB)
 
 ### Запуск
 
@@ -68,6 +68,11 @@ make run
 - `REDIS_PORT`
 - `REDIS_PASSWORD`
 - `REDIS_DB`
+- `MONGODB_DATABSE`
+- `MONGODB_USER`
+- `MONGODB_PASSWORD`
+- `MONGODB_HOST`
+- `MONGODB_PORT`
 
 ### API
 
@@ -78,4 +83,20 @@ make run
 - `POST /session`
   - Создаёт новую сессию при первом визите (`201 Created`)
   - Обновляет TTL существующей сессии (`200 OK`)
-  - Сессии хранятся в Redis как Hash по ключу `sid:{session_id}` с полями `created_at` и `updated_at`
+  - Сессии хранятся в Redis как Hash по ключу `sid:{session_id}`
+- `POST /users`
+  - Регистрирует нового пользователя
+  - Сохраняет в MongoDB документ в коллекцию `users` с `password_hash` (bcrypt)
+  - После успешной регистрации создаёт новую сессию и привязывает её к пользователю (`user_id` в Redis)
+- `POST /auth/login`
+  - Аутентифицирует пользователя по `username` и `password`
+  - Привязывает текущую сессию к пользователю либо создаёт новую
+- `POST /auth/logout`
+  - Удаляет сессию в Redis
+  - Удаляет cookie `X-Session-Id` (`Max-Age=0`)
+- `POST /events`
+  - Доступен только авторизованным пользователям
+  - Создаёт событие в MongoDB (`events`) и возвращает `id` созданного события
+- `GET /events`
+  - Возвращает список событий
+  - Поддерживает фильтрацию по `title` и пагинацию через `limit`/`offset`

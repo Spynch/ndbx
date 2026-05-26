@@ -6,6 +6,7 @@ services:
       - .env.local
     depends_on:
       - redis
+      - mongodb
     ports:
       - "${APP_PORT}:${APP_PORT}"
   redis:
@@ -15,3 +16,10 @@ services:
       - .env.local
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
+  mongodb:
+    image: mongo:8.0
+    command: ["mongod", "--port", "${MONGODB_PORT}"]
+    env_file:
+      - .env.local
+    ports:
+      - "${MONGODB_PORT}:${MONGODB_PORT}"
