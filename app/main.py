@@ -1,7 +1,8 @@
 import os
 import re
 import secrets
-import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
@@ -13,15 +14,13 @@ import uvicorn
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pymongo import ASCENDING, MongoClient
+from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 COOKIE_NAME = "X-Session-Id"
 SESSION_KEY_PREFIX = "sid:"
 SID_BYTES = 16
 SID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
-INDEX_INIT_ATTEMPTS = 20
-INDEX_INIT_DELAY_SECONDS = 0.5
 EVENT_CATEGORIES = {"meetup", "concert", "exhibition", "party", "other"}
 YYYYMMDD_PATTERN = re.compile(r"^\d{8}$")
 
@@ -112,23 +111,6 @@ def _build_mongodb_client(settings: Settings) -> MongoClient:
 
     uri = f"mongodb://{auth}{settings.mongodb_host}:{settings.mongodb_port}/{query}"
     return MongoClient(uri, serverSelectionTimeoutMS=5000)
-
-
-def _ensure_indexes(app_instance: FastAPI) -> None:
-    database = app_instance.state.mongodb
-    users = database["users"]
-    events = database["events"]
-
-    users.create_index([("username", ASCENDING)], unique=True)
-    users.create_index([("full_name", ASCENDING)])
-    events.create_index([("title", ASCENDING), ("created_by", ASCENDING)])
-    events.create_index([("created_by", ASCENDING), ("title", ASCENDING)])
-    events.create_index([("created_by", ASCENDING)])
-    events.create_index([("title", ASCENDING)])
-    events.create_index([("category", ASCENDING)])
-    events.create_index([("price", ASCENDING)])
-    events.create_index([("location.city", ASCENDING)])
-    events.create_index([("started_at", ASCENDING)])
 
 
 def _session_key(sid: str) -> str:
@@ -450,32 +432,22 @@ def _event_started_date(document: dict[str, Any]) -> date | None:
 
 
 settings = Settings.from_env()
-app = FastAPI()
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        app_instance.state.redis.close()
+        app_instance.state.mongodb_client.close()
+
+
+app = FastAPI(lifespan=lifespan)
 app.state.settings = settings
 app.state.redis = _build_redis_client(settings)
 app.state.mongodb_client = _build_mongodb_client(settings)
 app.state.mongodb = app.state.mongodb_client[settings.mongodb_database]
-
-
-@app.on_event("startup")
-def startup() -> None:
-    last_error: Exception | None = None
-
-    for _ in range(INDEX_INIT_ATTEMPTS):
-        try:
-            _ensure_indexes(app)
-            return
-        except PyMongoError as exc:
-            last_error = exc
-            time.sleep(INDEX_INIT_DELAY_SECONDS)
-
-    raise RuntimeError("MongoDB is unavailable") from last_error
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    app.state.redis.close()
-    app.state.mongodb_client.close()
 
 
 @app.get("/health")
