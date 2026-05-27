@@ -1,4 +1,6 @@
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import uvicorn
 from cassandra import DriverException
@@ -13,13 +15,50 @@ from app.storage import (
     build_cassandra_session,
     build_mongodb_client,
     build_redis_client,
-    ensure_indexes,
-    ensure_cassandra_schema,
     resolve_cassandra_consistency,
 )
 
 settings = Settings.from_env()
-app = FastAPI()
+
+
+def close_cassandra(app_instance: FastAPI) -> None:
+    if app_instance.state.cassandra_cluster is not None:
+        app_instance.state.cassandra_cluster.shutdown()
+        app_instance.state.cassandra_cluster = None
+        app_instance.state.cassandra = None
+
+
+def connect_datastores(app_instance: FastAPI) -> None:
+    app_instance.state.mongodb.command("ping")
+    app_instance.state.cassandra_cluster = build_cassandra_cluster(settings)
+    app_instance.state.cassandra = build_cassandra_session(app_instance.state.cassandra_cluster)
+    app_instance.state.cassandra.set_keyspace(settings.cassandra_keyspace)
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
+    last_error: Exception | None = None
+
+    for attempt in range(settings.startup_retry_attempts):
+        try:
+            connect_datastores(app_instance)
+            break
+        except (PyMongoError, NoHostAvailable, DriverException) as exc:
+            last_error = exc
+            close_cassandra(app_instance)
+            if attempt == settings.startup_retry_attempts - 1:
+                raise RuntimeError("MongoDB or Cassandra is unavailable") from last_error
+            time.sleep(settings.startup_retry_delay_seconds)
+
+    try:
+        yield
+    finally:
+        app_instance.state.redis.close()
+        app_instance.state.mongodb_client.close()
+        close_cassandra(app_instance)
+
+
+app = FastAPI(lifespan=lifespan)
 app.state.settings = settings
 app.state.redis = build_redis_client(settings)
 app.state.mongodb_client = build_mongodb_client(settings)
@@ -28,35 +67,6 @@ app.state.cassandra_cluster = None
 app.state.cassandra = None
 app.state.cassandra_consistency = resolve_cassandra_consistency(settings)
 app.include_router(router)
-
-
-
-    for _ in range(settings.startup_retry_attempts):
-        try:
-            if app.state.cassandra is None:
-                app.state.cassandra_cluster = build_cassandra_cluster(settings)
-                app.state.cassandra = build_cassandra_session(app.state.cassandra_cluster)
-
-            ensure_indexes(app)
-            ensure_cassandra_schema(app)
-            return
-        except (PyMongoError, NoHostAvailable, DriverException) as exc:
-            last_error = exc
-            if app.state.cassandra_cluster is not None:
-                app.state.cassandra_cluster.shutdown()
-                app.state.cassandra_cluster = None
-                app.state.cassandra = None
-            time.sleep(settings.startup_retry_delay_seconds)
-
-    raise RuntimeError("MongoDB or Cassandra is unavailable") from last_error
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    app.state.redis.close()
-    app.state.mongodb_client.close()
-    if app.state.cassandra_cluster is not None:
-        app.state.cassandra_cluster.shutdown()
 
 
 def main() -> None:
