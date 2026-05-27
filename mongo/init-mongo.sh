@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 wait_for_mongo() {
   local host="$1"
   local port="$2"
@@ -31,7 +33,10 @@ init_replica_set() {
 
   mongosh --quiet --host "$host" --port "$port" --eval "
 try {
-  rs.status();
+  const status = rs.status();
+  if (status.ok !== 1) {
+    throw new Error('Replica set status is not ok');
+  }
 } catch (e) {
   rs.initiate(${config_json});
 }
@@ -107,16 +112,7 @@ add_shard_if_missing \
   "${MONGO_SHARD2_RS}" \
   "${MONGO_SHARD2_RS}/mongo-shard2-1:${MONGO_SHARD2_1_PORT},mongo-shard2-2:${MONGO_SHARD2_2_PORT},mongo-shard2-3:${MONGO_SHARD2_3_PORT}"
 
-DATABASE_NAME="${MONGODB_DATABASE:?MONGODB_DATABASE is required}"
+echo "Initializing application databases..."
+bash "${SCRIPT_DIR}/init-databases.sh"
 
-echo "Enabling sharding for ${DATABASE_NAME}.events..."
-mongosh --quiet --host "$MONGODB_HOST" --port "$MONGODB_PORT" --eval "
-sh.enableSharding('${DATABASE_NAME}');
-const namespace = '${DATABASE_NAME}.events';
-const collection = db.getSiblingDB('config').collections.findOne({ _id: namespace });
-if (!collection) {
-  sh.shardCollection(namespace, { created_by: 'hashed' });
-}
-"
-
-echo "MongoDB sharding initialization complete."
+echo "MongoDB initialization complete."
