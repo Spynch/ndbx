@@ -30,9 +30,6 @@ app.state.cassandra_consistency = resolve_cassandra_consistency(settings)
 app.include_router(router)
 
 
-@app.on_event("startup")
-def startup() -> None:
-    last_error: Exception | None = None
 
     for _ in range(settings.startup_retry_attempts):
         try:
