@@ -95,6 +95,7 @@ class Settings:
     redis_db: int
     like_ttl: int
     event_reviews_ttl: int
+    recommendations_ttl: int
     mongodb_database: str
     mongodb_user: str
     mongodb_password: str
@@ -110,6 +111,9 @@ class Settings:
     cassandra_replication_factor: int
     startup_retry_attempts: int
     startup_retry_delay_seconds: float
+    neo4j_url: str
+    neo4j_username: str
+    neo4j_password: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -123,6 +127,7 @@ class Settings:
             redis_db=_read_int_env("REDIS_DB", min_value=0),
             like_ttl=_read_int_env("APP_LIKE_TTL", min_value=1),
             event_reviews_ttl=_read_int_env("APP_EVENT_REVIEWS_TTL", min_value=1),
+            recommendations_ttl=_read_int_env("APP_RECOMMENDATIONS_TTL", min_value=1),
             mongodb_database=_read_mongodb_database_env(),
             mongodb_user=_read_required_env("MONGODB_USER"),
             mongodb_password=_read_required_env("MONGODB_PASSWORD"),
@@ -138,4 +143,7 @@ class Settings:
             cassandra_replication_factor=_read_int_env("CASSANDRA_REPLICATION_FACTOR", min_value=1),
             startup_retry_attempts=_read_int_env("APP_STARTUP_RETRY_ATTEMPTS", min_value=1),
             startup_retry_delay_seconds=_read_float_env("APP_STARTUP_RETRY_DELAY_SECONDS", min_value=0.0),
+            neo4j_url=_read_required_env("NEO4J_URL"),
+            neo4j_username=_read_required_env("NEO4J_USERNAME"),
+            neo4j_password=_read_required_env("NEO4J_PASSWORD"),
         )

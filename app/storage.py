@@ -4,6 +4,7 @@ import redis
 from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster, Session
+from neo4j import Driver, GraphDatabase
 from pymongo import MongoClient
 
 from app.config import Settings
@@ -51,6 +52,14 @@ def build_cassandra_cluster(settings: Settings) -> Cluster:
 
 def build_cassandra_session(cluster: Cluster) -> Session:
     return cluster.connect()
+
+
+def build_neo4j_driver(settings: Settings) -> Driver:
+    auth = None
+    if settings.neo4j_username != "":
+        auth = (settings.neo4j_username, settings.neo4j_password)
+
+    return GraphDatabase.driver(settings.neo4j_url, auth=auth)
 
 
 def resolve_cassandra_consistency(settings: Settings) -> int:

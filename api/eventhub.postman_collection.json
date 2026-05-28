@@ -1,0 +1,97 @@
+{
+  "info": {
+    "name": "EventHub Lab 7",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "event_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "Create session",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/session"
+      }
+    },
+    {
+      "name": "Create user",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"full_name\": \"Lab User\",\n  \"username\": \"lab_user\",\n  \"password\": \"password\"\n}"
+        },
+        "url": "{{base_url}}/users"
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"lab_user\",\n  \"password\": \"password\"\n}"
+        },
+        "url": "{{base_url}}/auth/login"
+      }
+    },
+    {
+      "name": "Create event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Neo4j meetup\",\n  \"address\": \"Moscow\",\n  \"description\": \"Recommendation demo event\",\n  \"started_at\": \"2031-01-01T12:00:00+03:00\",\n  \"finished_at\": \"2031-01-01T14:00:00+03:00\"\n}"
+        },
+        "url": "{{base_url}}/events"
+      }
+    },
+    {
+      "name": "Like event",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/events/{{event_id}}/like"
+      }
+    },
+    {
+      "name": "Get recommendations",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/recommendations"
+      }
+    }
+  ]
+}

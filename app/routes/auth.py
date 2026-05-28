@@ -2,9 +2,11 @@ import bcrypt
 import redis
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.http_utils import invalid_field_response, read_json_payload, safe_get_json_field
+from app.neo4j_graph import create_user_node
 from app.routes.common import refresh_session_for_post_if_exists, require_authenticated_user_for_post
 from app.session import (
     COOKIE_NAME,
@@ -59,6 +61,15 @@ async def create_user(request: Request) -> Response:
         raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
 
     user_id = str(inserted.inserted_id)
+    try:
+        create_user_node(request.app.state.neo4j_driver, user_id)
+    except (Neo4jError, ServiceUnavailable, SessionExpired) as exc:
+        try:
+            request.app.state.mongodb["users"].delete_one({"_id": inserted.inserted_id})
+        except PyMongoError:
+            pass
+        raise HTTPException(status_code=503, detail="Neo4j is unavailable") from exc
+
     try:
         sid = create_session(request.app.state.redis, request.app.state.settings.session_ttl, user_id=user_id)
     except redis.RedisError as exc:
