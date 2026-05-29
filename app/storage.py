@@ -8,6 +8,7 @@ from pymongo import MongoClient
 
 from app.config import Settings
 
+
 def build_redis_client(settings: Settings) -> redis.Redis:
     password = settings.redis_password or None
     return redis.Redis(

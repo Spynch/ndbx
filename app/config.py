@@ -13,15 +13,15 @@ def _read_required_env(name: str) -> str:
 
 
 def _read_mongodb_database_env() -> str:
-    value = os.getenv("MONGODB_DATABSE")
+    value = os.getenv("MONGODB_DATABASE")
     if value is not None:
         return value
 
-    fallback = os.getenv("MONGODB_DATABASE")
+    fallback = os.getenv("MONGODB_DATABSE")
     if fallback is not None:
         return fallback
 
-    raise ValueError("MONGODB_DATABSE is required")
+    raise ValueError("MONGODB_DATABASE is required")
 
 
 def _read_hosts_env(name: str) -> tuple[str, ...]:
@@ -94,6 +94,7 @@ class Settings:
     redis_password: str
     redis_db: int
     like_ttl: int
+    event_reviews_ttl: int
     mongodb_database: str
     mongodb_user: str
     mongodb_password: str
@@ -121,6 +122,7 @@ class Settings:
             redis_password=_read_required_env("REDIS_PASSWORD"),
             redis_db=_read_int_env("REDIS_DB", min_value=0),
             like_ttl=_read_int_env("APP_LIKE_TTL", min_value=1),
+            event_reviews_ttl=_read_int_env("APP_EVENT_REVIEWS_TTL", min_value=1),
             mongodb_database=_read_mongodb_database_env(),
             mongodb_user=_read_required_env("MONGODB_USER"),
             mongodb_password=_read_required_env("MONGODB_PASSWORD"),
