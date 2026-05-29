@@ -67,6 +67,8 @@ services:
     image: neo4j:5.24-community
     environment:
       NEO4J_AUTH: ${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+    ports:
+      - "${NEO4J_BOLT_PORT}:7687"
     volumes:
       - neo4j-data:/data
     healthcheck:
