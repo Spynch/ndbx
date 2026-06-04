@@ -1,0 +1,11 @@
+CREATE CONSTRAINT user_id IF NOT EXISTS
+FOR (u:User)
+REQUIRE u.id IS UNIQUE;
+
+CREATE CONSTRAINT event_id IF NOT EXISTS
+FOR (e:Event)
+REQUIRE e.id IS UNIQUE;
+
+CREATE INDEX event_title IF NOT EXISTS
+FOR (e:Event)
+ON (e.title);

@@ -37,7 +37,7 @@ def refresh_session_for_post_if_exists(request: Request, response: Response) -> 
     return sid
 
 
-def require_authenticated_user_for_post(request: Request) -> tuple[str, str] | Response:
+def require_authenticated_user(request: Request) -> tuple[str, str] | Response:
     auth_probe_response = Response(status_code=204)
     sid = refresh_session_for_post_if_exists(request, auth_probe_response)
 
@@ -55,3 +55,7 @@ def require_authenticated_user_for_post(request: Request) -> tuple[str, str] | R
         return response
 
     return sid, user_id
+
+
+def require_authenticated_user_for_post(request: Request) -> tuple[str, str] | Response:
+    return require_authenticated_user(request)

@@ -47,7 +47,7 @@ Backend-сервис платформы мероприятий для практ
 
 Возникли вопросы? → [@sitnikovik](https://t.me/sitnikovik)
 
-## Лабораторная работа №3: пользователи и события (Redis + MongoDB)
+## Лабораторная работа №7: рекомендации мероприятий (Redis + MongoDB + Cassandra + Neo4j)
 
 ### Запуск
 
@@ -66,6 +66,7 @@ make run
 - `APP_USER_SESSION_TTL`
 - `APP_LIKE_TTL`
 - `APP_EVENT_REVIEWS_TTL`
+- `APP_RECOMMENDATIONS_TTL`
 - `APP_STARTUP_RETRY_ATTEMPTS`
 - `APP_STARTUP_RETRY_DELAY_SECONDS`
 - `REDIS_HOST`
@@ -101,6 +102,10 @@ make run
 - `CASSANDRA_NUM_TOKENS`
 - `CASSANDRA_MAX_HEAP_SIZE`
 - `CASSANDRA_HEAP_NEWSIZE`
+- `NEO4J_URL`
+- `NEO4J_BOLT_PORT`
+- `NEO4J_USERNAME`
+- `NEO4J_PASSWORD`
 
 ### API
 
@@ -128,3 +133,7 @@ make run
 - `GET /events`
   - Возвращает список событий
   - Поддерживает фильтрацию по `title` и пагинацию через `limit`/`offset`
+- `GET /recommendations`
+  - Доступен только авторизованным пользователям
+  - Возвращает `{"events": [...]}` без поля `count`
+  - Строит рекомендации по лайкам через Neo4j и кэширует список в Redis hash `user:{user_id}:recomms`

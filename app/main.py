@@ -6,6 +6,7 @@ import uvicorn
 from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from fastapi import FastAPI
+from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 from pymongo.errors import PyMongoError
 
 from app.config import Settings
@@ -14,6 +15,7 @@ from app.storage import (
     build_cassandra_cluster,
     build_cassandra_session,
     build_mongodb_client,
+    build_neo4j_driver,
     build_redis_client,
     resolve_cassandra_consistency,
 )
@@ -33,6 +35,7 @@ def connect_datastores(app_instance: FastAPI) -> None:
     app_instance.state.cassandra_cluster = build_cassandra_cluster(settings)
     app_instance.state.cassandra = build_cassandra_session(app_instance.state.cassandra_cluster)
     app_instance.state.cassandra.set_keyspace(settings.cassandra_keyspace)
+    app_instance.state.neo4j_driver.verify_connectivity()
 
 
 @asynccontextmanager
@@ -43,11 +46,18 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
         try:
             connect_datastores(app_instance)
             break
-        except (PyMongoError, NoHostAvailable, DriverException) as exc:
+        except (
+            PyMongoError,
+            NoHostAvailable,
+            DriverException,
+            Neo4jError,
+            ServiceUnavailable,
+            SessionExpired,
+        ) as exc:
             last_error = exc
             close_cassandra(app_instance)
             if attempt == settings.startup_retry_attempts - 1:
-                raise RuntimeError("MongoDB or Cassandra is unavailable") from last_error
+                raise RuntimeError("MongoDB, Cassandra or Neo4j is unavailable") from last_error
             time.sleep(settings.startup_retry_delay_seconds)
 
     try:
@@ -55,6 +65,7 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     finally:
         app_instance.state.redis.close()
         app_instance.state.mongodb_client.close()
+        app_instance.state.neo4j_driver.close()
         close_cassandra(app_instance)
 
 
@@ -63,6 +74,7 @@ app.state.settings = settings
 app.state.redis = build_redis_client(settings)
 app.state.mongodb_client = build_mongodb_client(settings)
 app.state.mongodb = app.state.mongodb_client[settings.mongodb_database]
+app.state.neo4j_driver = build_neo4j_driver(settings)
 app.state.cassandra_cluster = None
 app.state.cassandra = None
 app.state.cassandra_consistency = resolve_cassandra_consistency(settings)

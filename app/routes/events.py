@@ -4,6 +4,7 @@ from typing import Any
 from cassandra import DriverException
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.http_utils import (
@@ -21,6 +22,7 @@ from app.http_utils import (
     safe_get_json_field,
     serialize_event,
 )
+from app.neo4j_graph import create_event_node, create_liked_relationship, delete_liked_relationship
 from app.reactions import (
     REACTION_DISLIKE,
     REACTION_LIKE,
@@ -115,6 +117,15 @@ async def create_event(request: Request) -> Response:
         raise HTTPException(status_code=503, detail="MongoDB is unavailable") from exc
 
     response = JSONResponse(status_code=201, content={"id": str(inserted.inserted_id)})
+    try:
+        create_event_node(request.app.state.neo4j_driver, str(inserted.inserted_id), title)
+    except (Neo4jError, ServiceUnavailable, SessionExpired) as exc:
+        try:
+            request.app.state.mongodb["events"].delete_one({"_id": inserted.inserted_id, "created_by": user_id})
+        except PyMongoError:
+            pass
+        raise HTTPException(status_code=503, detail="Neo4j is unavailable") from exc
+
     set_session_cookie(response, sid, request.app.state.settings.session_ttl)
     return response
 
@@ -151,12 +162,29 @@ def _set_event_reaction(
         set_session_cookie(response, sid, request.app.state.settings.session_ttl)
         return response
 
+    event_title = event_document.get("title")
+    created_neo4j_relationship = False
+    if like_value == REACTION_LIKE and isinstance(event_title, str):
+        try:
+            created_neo4j_relationship = create_liked_relationship(
+                request.app.state.neo4j_driver,
+                user_id,
+                canonical_event_id,
+                event_title,
+            )
+        except (Neo4jError, ServiceUnavailable, SessionExpired) as exc:
+            raise HTTPException(status_code=503, detail="Neo4j is unavailable") from exc
+
     try:
         upsert_event_reaction(request, canonical_event_id, user_id, like_value)
     except DriverException as exc:
+        if created_neo4j_relationship:
+            try:
+                delete_liked_relationship(request.app.state.neo4j_driver, user_id, canonical_event_id)
+            except (Neo4jError, ServiceUnavailable, SessionExpired):
+                pass
         raise HTTPException(status_code=503, detail="Cassandra is unavailable") from exc
 
-    event_title = event_document.get("title")
     if isinstance(event_title, str):
         invalidate_event_title_reactions_cache(request, event_title)
         try:

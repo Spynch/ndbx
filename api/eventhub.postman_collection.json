@@ -1,0 +1,368 @@
+{
+  "info": {
+    "name": "EventHub Lab 7",
+    "description": "Полная коллекция запросов для проверки всех маршрутов проекта EventHub.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "full_name",
+      "value": "Lab User"
+    },
+    {
+      "key": "username",
+      "value": "lab_user"
+    },
+    {
+      "key": "password",
+      "value": "password"
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "event_id",
+      "value": ""
+    },
+    {
+      "key": "event_title",
+      "value": "Neo4j meetup"
+    },
+    {
+      "key": "review_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Служебные запросы",
+      "item": [
+        {
+          "name": "Проверка работы приложения",
+          "request": {
+            "method": "GET",
+            "description": "Проверяет, что приложение запущено. Ответ: {\"status\":\"ok\"}.",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "Создать или продлить сессию",
+          "request": {
+            "method": "POST",
+            "description": "Создает новую сессию или продлевает существующую сессию по cookie X-Session-Id.",
+            "url": "{{base_url}}/session"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Пользователи и вход",
+      "item": [
+        {
+          "name": "Создать пользователя",
+          "request": {
+            "method": "POST",
+            "description": "Регистрирует пользователя, сохраняет его в MongoDB, создает узел в Neo4j и открывает сессию.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"{{full_name}}\",\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "Войти",
+          "request": {
+            "method": "POST",
+            "description": "Проверяет имя пользователя и пароль. После успешного входа сессия привязывается к пользователю.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        },
+        {
+          "name": "Список пользователей",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const data = pm.response.json();",
+                  "  if (Array.isArray(data.users) && data.users.length > 0) {",
+                  "    pm.collectionVariables.set(\"user_id\", data.users[0].id);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "description": "Возвращает пользователей. Поддерживает параметры name, id, limit, offset. Первый найденный id сохраняется в переменную user_id.",
+            "url": "{{base_url}}/users?name={{full_name}}&limit=10&offset=0"
+          }
+        },
+        {
+          "name": "Получить пользователя по id",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает одного пользователя по переменной user_id.",
+            "url": "{{base_url}}/users/{{user_id}}"
+          }
+        },
+        {
+          "name": "Мероприятия пользователя",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает мероприятия конкретного пользователя. Поддерживает фильтры title, id, category, city, price_from, price_to, date_from, date_to, limit, offset, include.",
+            "url": "{{base_url}}/users/{{user_id}}/events?include=reactions,reviews&limit=10&offset=0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Мероприятия",
+      "item": [
+        {
+          "name": "Создать мероприятие",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) {",
+                  "    pm.collectionVariables.set(\"event_id\", data.id);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Создает мероприятие от имени текущего пользователя. id ответа сохраняется в переменную event_id.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"{{event_title}}\",\n  \"address\": \"Moscow, Test address\",\n  \"description\": \"Recommendation demo event\",\n  \"started_at\": \"2031-01-01T12:00:00+03:00\",\n  \"finished_at\": \"2031-01-01T14:00:00+03:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/events"
+          }
+        },
+        {
+          "name": "Список мероприятий",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает мероприятия. Поддерживает title, id, category, city, user, price_from, price_to, date_from, date_to, limit, offset, include.",
+            "url": "{{base_url}}/events?include=reactions,reviews&title={{event_title}}&limit=10&offset=0"
+          }
+        },
+        {
+          "name": "Получить мероприятие по id",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает одно мероприятие по event_id. include добавляет реакции и отзывы.",
+            "url": "{{base_url}}/events/{{event_id}}?include=reactions,reviews"
+          }
+        },
+        {
+          "name": "Изменить мероприятие",
+          "request": {
+            "method": "PATCH",
+            "description": "Изменяет category, price и city. Доступно только автору мероприятия.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"meetup\",\n  \"price\": 1000,\n  \"city\": \"Moscow\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/events/{{event_id}}"
+          }
+        },
+        {
+          "name": "Список мероприятий с полными фильтрами",
+          "request": {
+            "method": "GET",
+            "description": "Пример запроса со всеми основными фильтрами для GET /events.",
+            "url": "{{base_url}}/events?include=reactions,reviews&title={{event_title}}&id={{event_id}}&category=meetup&city=Moscow&user={{username}}&price_from=0&price_to=5000&date_from=20310101&date_to=20311231&limit=10&offset=0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Реакции",
+      "item": [
+        {
+          "name": "Поставить лайк",
+          "request": {
+            "method": "POST",
+            "description": "Сохраняет лайк в Cassandra и создает связь пользователя с мероприятием в Neo4j.",
+            "url": "{{base_url}}/events/{{event_id}}/like"
+          }
+        },
+        {
+          "name": "Поставить дизлайк",
+          "request": {
+            "method": "POST",
+            "description": "Сохраняет дизлайк в Cassandra и обновляет временный подсчет реакций в Redis.",
+            "url": "{{base_url}}/events/{{event_id}}/dislike"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Отзывы",
+      "item": [
+        {
+          "name": "Создать отзыв",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const data = pm.response.json();",
+                  "  if (data.id) {",
+                  "    pm.collectionVariables.set(\"review_id\", data.id);",
+                  "  }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "description": "Создает отзыв текущего пользователя к мероприятию. id ответа сохраняется в переменную review_id.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Good event\",\n  \"rating\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/events/{{event_id}}/reviews"
+          }
+        },
+        {
+          "name": "Список отзывов мероприятия",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает отзывы мероприятия. Поддерживает limit и offset.",
+            "url": "{{base_url}}/events/{{event_id}}/reviews?limit=10&offset=0"
+          }
+        },
+        {
+          "name": "Изменить отзыв",
+          "request": {
+            "method": "PATCH",
+            "description": "Изменяет свой отзыв по review_id. Можно передать comment, rating или оба поля.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Updated review\",\n  \"rating\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/events/{{event_id}}/reviews/{{review_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Рекомендации",
+      "item": [
+        {
+          "name": "Получить рекомендации",
+          "request": {
+            "method": "GET",
+            "description": "Возвращает рекомендации для текущего пользователя. Расчет строится по связям лайков в Neo4j, полные данные берутся из MongoDB, результат временно хранится в Redis.",
+            "url": "{{base_url}}/recommendations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Завершение работы",
+      "item": [
+        {
+          "name": "Выйти",
+          "request": {
+            "method": "POST",
+            "description": "Удаляет сессию из Redis и очищает cookie X-Session-Id.",
+            "url": "{{base_url}}/auth/logout"
+          }
+        }
+      ]
+    }
+  ]
+}
