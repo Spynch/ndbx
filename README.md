@@ -810,6 +810,8 @@ docker compose --env-file .env.local down -v --remove-orphans
 
 ## Тестирование
 
+Проект проходит автоматизированную проверку в GitHub Actions через workflow [EventHub](.github/workflows/eventhub.yml). Этот workflow запускается на `push`, `pull_request` в `main`/`master` и вручную через `workflow_dispatch`; статус отображается бейджем сборки в шапке README.
+
 ### Как запустить проверки
 
 Базовая проверка проекта:
