@@ -1,0 +1,595 @@
+﻿openapi: 3.0.3
+info:
+  title: EventHub API
+  version: lab-7
+  description: API сервиса мероприятий EventHub с примерами запросов и ответов.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Events
+  - name: Reviews
+  - name: Recommendations
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Healthcheck приложения
+      responses:
+        '200':
+          description: Приложение доступно.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+              example: {status: ok}
+  /session:
+    post:
+      tags: [Health]
+      summary: Создать или продлить сессию
+      responses:
+        '201':
+          description: Новая сессия создана, cookie возвращается в Set-Cookie.
+          headers:
+            Set-Cookie:
+              schema: {type: string}
+              example: X-Session-Id=0f2e8d4a0c4f4f6a9e1c2b3d4e5f6789; HttpOnly; Max-Age=60; Path=/
+        '200':
+          description: Существующая сессия продлена.
+        '503': {$ref: '#/components/responses/RedisUnavailable'}
+  /users:
+    post:
+      tags: [Auth]
+      summary: Зарегистрировать пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserCreate'}
+            example: {full_name: Lab User, username: lab_user, password: password}
+      responses:
+        '201':
+          description: Пользователь создан, сессия открыта. Тело ответа пустое.
+          headers:
+            Set-Cookie:
+              schema: {type: string}
+              example: X-Session-Id=0f2e8d4a0c4f4f6a9e1c2b3d4e5f6789; HttpOnly; Max-Age=60; Path=/
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '409':
+          description: Username уже занят.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: user already exists}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+    get:
+      tags: [Users]
+      summary: Список пользователей
+      parameters:
+        - {name: name, in: query, schema: {type: string}, example: Lab User}
+        - {name: id, in: query, schema: {type: string}, example: 66589d4de1382301240f8e10}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Пользователи без password_hash.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserList'}
+              example:
+                users:
+                  - {id: 66589d4de1382301240f8e10, full_name: Lab User, username: lab_user}
+                count: 1
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '503': {$ref: '#/components/responses/MongoUnavailable'}
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Войти по username и password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Login'}
+            example: {username: lab_user, password: password}
+      responses:
+        '204':
+          description: Пользователь аутентифицирован, cookie сессии возвращается в Set-Cookie.
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '401':
+          description: Неверные учетные данные.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: invalid credentials}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Выйти из системы
+      security: [{cookieAuth: []}]
+      responses:
+        '204': {description: Сессия удалена, cookie сброшена.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/RedisUnavailable'}
+  /users/{user_id}:
+    get:
+      tags: [Users]
+      summary: Пользователь по id
+      parameters:
+        - {$ref: '#/components/parameters/UserId'}
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+              example: {id: 66589d4de1382301240f8e10, full_name: Lab User, username: lab_user}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/MongoUnavailable'}
+  /users/{user_id}/events:
+    get:
+      tags: [Users]
+      summary: Мероприятия пользователя
+      parameters:
+        - {$ref: '#/components/parameters/UserId'}
+        - {$ref: '#/components/parameters/Title'}
+        - {$ref: '#/components/parameters/EventIdQuery'}
+        - {$ref: '#/components/parameters/Category'}
+        - {$ref: '#/components/parameters/City'}
+        - {$ref: '#/components/parameters/PriceFrom'}
+        - {$ref: '#/components/parameters/PriceTo'}
+        - {$ref: '#/components/parameters/DateFrom'}
+        - {$ref: '#/components/parameters/DateTo'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - {$ref: '#/components/parameters/Include'}
+      responses:
+        '200': {$ref: '#/components/responses/EventListOk'}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '404':
+          description: Пользователь не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: User not found}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /events:
+    post:
+      tags: [Events]
+      summary: Создать мероприятие
+      security: [{cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventCreate'}
+            example:
+              title: Neo4j meetup
+              address: Moscow, Test address
+              description: Recommendation demo event
+              started_at: '2031-01-01T12:00:00+03:00'
+              finished_at: '2031-01-01T14:00:00+03:00'
+      responses:
+        '201':
+          description: Мероприятие создано.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Id'}
+              example: {id: 66589ef7e1382301240f8e11}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409':
+          description: Мероприятие уже существует.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: event already exists}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+    get:
+      tags: [Events]
+      summary: Список мероприятий
+      parameters:
+        - {$ref: '#/components/parameters/Title'}
+        - {$ref: '#/components/parameters/EventIdQuery'}
+        - {$ref: '#/components/parameters/Category'}
+        - {$ref: '#/components/parameters/City'}
+        - {name: user, in: query, schema: {type: string}, example: lab_user}
+        - {$ref: '#/components/parameters/PriceFrom'}
+        - {$ref: '#/components/parameters/PriceTo'}
+        - {$ref: '#/components/parameters/DateFrom'}
+        - {$ref: '#/components/parameters/DateTo'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - {$ref: '#/components/parameters/Include'}
+      responses:
+        '200': {$ref: '#/components/responses/EventListOk'}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /events/{event_id}:
+    get:
+      tags: [Events]
+      summary: Мероприятие по id
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+        - {$ref: '#/components/parameters/Include'}
+      responses:
+        '200':
+          description: Мероприятие найдено.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+              examples:
+                event:
+                  $ref: '#/components/examples/Event'
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+    patch:
+      tags: [Events]
+      summary: Изменить мероприятие
+      description: 'Доступно только автору. Изменяемые поля: `category`, `price`, `city`.'
+      security: [{cookieAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventPatch'}
+            example: {category: meetup, price: 1000, city: Moscow}
+      responses:
+        '204': {description: Мероприятие изменено.}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404':
+          description: Мероприятие не найдено или пользователь не является организатором.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: Not found. Be sure that event exists and you are the organizer}
+        '503': {$ref: '#/components/responses/MongoUnavailable'}
+  /events/{event_id}/like:
+    post:
+      tags: [Events]
+      summary: Поставить лайк
+      security: [{cookieAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+      responses:
+        '204': {description: Лайк записан в Cassandra, связь LIKED создана в Neo4j.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/EventNotFound'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /events/{event_id}/dislike:
+    post:
+      tags: [Events]
+      summary: Поставить дизлайк
+      security: [{cookieAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+      responses:
+        '204': {description: Дизлайк записан в Cassandra, кеш реакций обновлен.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/EventNotFound'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /events/{event_id}/reviews:
+    post:
+      tags: [Reviews]
+      summary: Создать отзыв
+      security: [{cookieAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewCreate'}
+            example: {comment: Good event, rating: 5}
+      responses:
+        '201':
+          description: Отзыв создан.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Id'}
+              example: {id: 7a6a5c0e-3d9e-4bb5-bc8c-90fdc0f94f3e}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/EventNotFound'}
+        '409':
+          description: Пользователь уже оставил отзыв.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {message: Already exists}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+    get:
+      tags: [Reviews]
+      summary: Список отзывов мероприятия
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+      responses:
+        '200':
+          description: Отзывы мероприятия.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewList'}
+              example:
+                reviews:
+                  - id: 7a6a5c0e-3d9e-4bb5-bc8c-90fdc0f94f3e
+                    event_id: 66589ef7e1382301240f8e11
+                    comment: Good event
+                    created_at: '2026-06-10T10:30:00Z'
+                    created_by: 66589d4de1382301240f8e10
+                    rating: 5
+                    updated_at: '2026-06-10T10:30:00Z'
+                count: 1
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '404': {$ref: '#/components/responses/EventNotFound'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /events/{event_id}/reviews/{review_id}:
+    patch:
+      tags: [Reviews]
+      summary: Изменить свой отзыв
+      security: [{cookieAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/EventId'}
+        - {$ref: '#/components/parameters/ReviewId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewPatch'}
+            example: {comment: Updated review, rating: 4}
+      responses:
+        '204': {description: Отзыв изменен.}
+        '400': {$ref: '#/components/responses/InvalidField'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404':
+          description: Мероприятие или отзыв не найден.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              examples:
+                event: {value: {message: Event not found}}
+                review: {value: {message: Review not found}}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+  /recommendations:
+    get:
+      tags: [Recommendations]
+      summary: Получить рекомендации
+      security: [{cookieAuth: []}]
+      responses:
+        '200':
+          description: Рекомендованные мероприятия. Поля `count` в ответе нет.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Recommendations'}
+              example:
+                events:
+                  - id: 66589ef7e1382301240f8e11
+                    title: Neo4j meetup
+                    category: meetup
+                    price: 1000
+                    description: Recommendation demo event
+                    location: {address: 'Moscow, Test address', city: Moscow}
+                    created_at: '2026-06-10T10:00:00Z'
+                    created_by: 66589d4de1382301240f8e10
+                    started_at: '2031-01-01T12:00:00+03:00'
+                    finished_at: '2031-01-01T14:00:00+03:00'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/StorageUnavailable'}
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: X-Session-Id
+  parameters:
+    UserId: {name: user_id, in: path, required: true, schema: {type: string}, example: 66589d4de1382301240f8e10}
+    EventId: {name: event_id, in: path, required: true, schema: {type: string}, example: 66589ef7e1382301240f8e11}
+    ReviewId: {name: review_id, in: path, required: true, schema: {type: string, format: uuid}, example: 7a6a5c0e-3d9e-4bb5-bc8c-90fdc0f94f3e}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 0}, example: 10}
+    Offset: {name: offset, in: query, schema: {type: integer, minimum: 0}, example: 0}
+    Include: {name: include, in: query, description: 'reactions, reviews или reactions,reviews', schema: {type: string}, example: reactions,reviews}
+    Title: {name: title, in: query, schema: {type: string}, example: Neo4j}
+    EventIdQuery: {name: id, in: query, schema: {type: string}, example: 66589ef7e1382301240f8e11}
+    Category: {name: category, in: query, schema: {type: string, enum: [meetup, concert, exhibition, party, other]}, example: meetup}
+    City: {name: city, in: query, schema: {type: string}, example: Moscow}
+    PriceFrom: {name: price_from, in: query, schema: {type: integer, minimum: 0}, example: 0}
+    PriceTo: {name: price_to, in: query, schema: {type: integer, minimum: 0}, example: 5000}
+    DateFrom: {name: date_from, in: query, description: YYYYMMDD, schema: {type: string, pattern: '^\d{8}$'}, example: '20310101'}
+    DateTo: {name: date_to, in: query, description: YYYYMMDD, schema: {type: string, pattern: '^\d{8}$'}, example: '20311231'}
+  responses:
+    InvalidField:
+      description: Некорректное поле.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: invalid "title" field}
+    Unauthorized: {description: Нет валидной авторизованной сессии. Тело ответа пустое.}
+    NotFound:
+      description: Объект не найден.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: Not found}
+    EventNotFound:
+      description: Мероприятие не найдено.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {message: Event not found}
+    RedisUnavailable:
+      description: Redis недоступен.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/FastApiError'}
+          example: {detail: Redis is unavailable}
+    MongoUnavailable:
+      description: MongoDB недоступна.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/FastApiError'}
+          example: {detail: MongoDB is unavailable}
+    StorageUnavailable:
+      description: Одно из хранилищ недоступно.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/FastApiError'}
+          examples:
+            mongo: {value: {detail: MongoDB is unavailable}}
+            redis: {value: {detail: Redis is unavailable}}
+            cassandra: {value: {detail: Cassandra is unavailable}}
+            neo4j: {value: {detail: Neo4j is unavailable}}
+    EventListOk:
+      description: Список мероприятий.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/EventList'}
+          example:
+            events:
+              - id: 66589ef7e1382301240f8e11
+                title: Neo4j meetup
+                category: meetup
+                price: 1000
+                description: Recommendation demo event
+                location: {address: 'Moscow, Test address', city: Moscow}
+                created_at: '2026-06-10T10:00:00Z'
+                created_by: 66589d4de1382301240f8e10
+                started_at: '2031-01-01T12:00:00+03:00'
+                finished_at: '2031-01-01T14:00:00+03:00'
+                reactions: {likes: 1, dislikes: 0}
+                reviews: {count: 1, rating: 5.0}
+            count: 1
+  schemas:
+    Health: {type: object, required: [status], properties: {status: {type: string, example: ok}}}
+    Error: {type: object, required: [message], properties: {message: {type: string}}}
+    FastApiError: {type: object, required: [detail], properties: {detail: {type: string}}}
+    Id: {type: object, required: [id], properties: {id: {type: string}}}
+    UserCreate:
+      type: object
+      required: [full_name, username, password]
+      properties:
+        full_name: {type: string, minLength: 1}
+        username: {type: string, minLength: 1}
+        password: {type: string, minLength: 1}
+    Login:
+      type: object
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 1}
+        password: {type: string, minLength: 1}
+    User:
+      type: object
+      required: [id, full_name, username]
+      properties:
+        id: {type: string}
+        full_name: {type: string}
+        username: {type: string}
+    UserList:
+      type: object
+      required: [users, count]
+      properties:
+        users: {type: array, items: {$ref: '#/components/schemas/User'}}
+        count: {type: integer, minimum: 0}
+    EventCreate:
+      type: object
+      required: [title, address, started_at, finished_at]
+      properties:
+        title: {type: string, minLength: 1}
+        address: {type: string, minLength: 1}
+        description: {type: string, default: ''}
+        started_at: {type: string, description: RFC3339 datetime with timezone}
+        finished_at: {type: string, description: RFC3339 datetime with timezone}
+    EventPatch:
+      type: object
+      properties:
+        category: {type: string, enum: [meetup, concert, exhibition, party, other]}
+        price: {type: integer, minimum: 0}
+        city: {type: string, description: Пустая строка удаляет location.city}
+    Event:
+      type: object
+      required: [id, title, category, price, description, location, created_at, created_by, started_at, finished_at]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        category: {type: string, enum: [meetup, concert, exhibition, party, other]}
+        price: {type: integer, minimum: 0}
+        description: {type: string}
+        location:
+          type: object
+          required: [address]
+          properties:
+            address: {type: string}
+            city: {type: string}
+        created_at: {type: string}
+        created_by: {type: string}
+        started_at: {type: string}
+        finished_at: {type: string}
+        reactions:
+          type: object
+          properties:
+            likes: {type: integer, minimum: 0}
+            dislikes: {type: integer, minimum: 0}
+        reviews:
+          type: object
+          properties:
+            count: {type: integer, minimum: 0}
+            rating: {type: number, minimum: 0}
+    EventList:
+      type: object
+      required: [events, count]
+      properties:
+        events: {type: array, items: {$ref: '#/components/schemas/Event'}}
+        count: {type: integer, minimum: 0}
+    ReviewCreate:
+      type: object
+      required: [comment, rating]
+      properties:
+        comment: {type: string, maxLength: 300}
+        rating: {type: integer, minimum: 1, maximum: 5}
+    ReviewPatch:
+      type: object
+      properties:
+        comment: {type: string, maxLength: 300}
+        rating: {type: integer, minimum: 1, maximum: 5}
+    Review:
+      type: object
+      required: [id, event_id, comment, created_at, created_by, rating, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        event_id: {type: string}
+        comment: {type: string}
+        created_at: {type: string}
+        created_by: {type: string}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        updated_at: {type: string}
+    ReviewList:
+      type: object
+      required: [reviews, count]
+      properties:
+        reviews: {type: array, items: {$ref: '#/components/schemas/Review'}}
+        count: {type: integer, minimum: 0}
+    Recommendations:
+      type: object
+      required: [events]
+      properties:
+        events: {type: array, items: {$ref: '#/components/schemas/Event'}}
+  examples:
+    Event:
+      value:
+        id: 66589ef7e1382301240f8e11
+        title: Neo4j meetup
+        category: meetup
+        price: 1000
+        description: Recommendation demo event
+        location: {address: 'Moscow, Test address', city: Moscow}
+        created_at: '2026-06-10T10:00:00Z'
+        created_by: 66589d4de1382301240f8e10
+        started_at: '2031-01-01T12:00:00+03:00'
+        finished_at: '2031-01-01T14:00:00+03:00'
+        reactions: {likes: 1, dislikes: 0}
+        reviews: {count: 1, rating: 5.0}
